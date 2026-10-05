@@ -2,9 +2,112 @@ import gradio as gr
 import numpy as np
 from PIL import Image
 from ultralytics import YOLO
+import os
+import shutil
+import pandas as pd
+
+base_path = "/content/drive/MyDrive/Checktray1/train"
+images_dir = os.path.join(base_path, "images")
+labels_dir = os.path.join(base_path, "labels")
+
+# Create target directories
+train_images_dir = os.path.join(images_dir, "train")
+val_images_dir = os.path.join(images_dir, "val")
+train_labels_dir = os.path.join(labels_dir, "train")
+val_labels_dir = os.path.join(labels_dir, "val")
+
+os.makedirs(train_images_dir, exist_ok=True)
+os.makedirs(val_images_dir, exist_ok=True)
+os.makedirs(train_labels_dir, exist_ok=True)
+os.makedirs(val_labels_dir, exist_ok=True)
+
+# Get lists of files and sort them to keep them in order and aligned
+all_images = sorted([f for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))])
+all_labels = sorted([f for f in os.listdir(labels_dir) if os.path.isfile(os.path.join(labels_dir, f))])
+
+# Split index calculations (75:25)
+split_idx = int(len(all_images) * 0.75)
+
+train_images = all_images[:split_idx]
+val_images = all_images[split_idx:]
+
+print(f"Total images found: {len(all_images)}")
+print(f"Splitting into {len(train_images)} train images and {len(val_images)} validation images.")
+
+# Move images to respective directories
+for img in train_images:
+    shutil.move(os.path.join(images_dir, img), os.path.join(train_images_dir, img))
+for img in val_images:
+    shutil.move(os.path.join(images_dir, img), os.path.join(val_images_dir, img))
+
+# Match labels and move them to their respective directories
+for img in train_images:
+    base_name = os.path.splitext(img)[0]
+    label_file = f"{base_name}.txt"
+    if os.path.exists(os.path.join(labels_dir, label_file)):
+        shutil.move(os.path.join(labels_dir, label_file), os.path.join(train_labels_dir, label_file))
+
+for img in val_images:
+    base_name = os.path.splitext(img)[0]
+    label_file = f"{base_name}.txt"
+    if os.path.exists(os.path.join(labels_dir, label_file)):
+        shutil.move(os.path.join(labels_dir, label_file), os.path.join(val_labels_dir, label_file))
+
+print("Dataset splitting completed successfully!")
+
+
+### Training Loop
+# Load a pretrained YOLO26n model
+model = YOLO("yolo26n.pt")
+
+# Train the model on your custom dataset
+# patience=5: activates early stopping if validation loss doesn't improve for 5 consecutive epochs
+results = model.train(
+    data="/content/drive/MyDrive/Checktray1/data.yaml",
+    epochs=50,
+    patience=5,
+    val=True
+)
+
+# Post-training validation to ensure the Confusion Matrix is generated
+metrics = model.val()
+print("Validation completed!")
+
+# Extract global metrics
+print("\n=== Global Performance Metrics ===")
+print(f"Mean Precision (all classes): {metrics.results_dict['metrics/precision(B)']:.4f}")
+print(f"Mean Recall (all classes):    {metrics.results_dict['metrics/recall(B)']:.4f}")
+print(f"mAP @ 0.50 (all classes):     {metrics.results_dict['metrics/mAP50(B)']:.4f}")
+print(f"mAP @ 0.50-0.95:              {metrics.results_dict['metrics/mAP50-95(B)']:.4f}")
+
+# Extract per-class metrics
+print("\n=== Per-Class Performance Metrics ===")
+class_names = model.names
+class_data = []
+
+for i, name in class_names.items():
+    precision = metrics.box.p[i] if len(metrics.box.p) > i else 0.0
+    recall = metrics.box.r[i] if len(metrics.box.r) > i else 0.0
+    ap50 = metrics.box.ap50[i] if len(metrics.box.ap50) > i else 0.0
+    ap = metrics.box.ap[i] if len(metrics.box.ap) > i else 0.0
+    
+    class_data.append({
+        "Class Name": name,
+        "Precision": f"{precision:.4f}",
+        "Recall": f"{recall:.4f}",
+        "AP @ 0.50": f"{ap50:.4f}",
+        "AP @ 0.50-0.95": f"{ap:.4f}"
+    })
+
+# Displaying per-class metrics as a clean pandas DataFrame
+df_metrics = pd.DataFrame(class_data)
+import IPython.display as display
+display.display(df_metrics)
+
+                          ## Inference with gradio ##
 
 # Path to the best model weights
-model_path = "/content/drive/MyDrive/Checktray1/best_model_weights.pt"
+model_path = "/content/drive/MyDrive/Checktray1/best.pt"
 
 # Load the YOLO model with the weights
 model = YOLO(model_path)
