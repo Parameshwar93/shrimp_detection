@@ -3,9 +3,6 @@ import numpy as np
 from PIL import Image
 from ultralytics import YOLO
 
-# Path to the best model weights
-model_path = "/content/drive/MyDrive/Checktray1/best_model_weights.pt"
-
 # Load the YOLO model with the weights
 model = YOLO(model_path)
 
