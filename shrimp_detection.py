@@ -12,7 +12,7 @@ model = YOLO(model_path)
 print("Model weights loaded successfully!")
 
 # Load the custom trained YOLO model
-model_path = "/content/drive/MyDrive/Checktray1/best_model_weights.pt"
+model_path = "/content/drive/MyDrive/Checktray1/shrimp_weights.pt"
 model = YOLO(model_path)
 
 def detect_shrimp(input_img):
